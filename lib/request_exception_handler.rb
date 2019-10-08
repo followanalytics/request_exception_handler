@@ -50,7 +50,7 @@ module RequestExceptionHandler
   end
 
   def self.included(base)
-    base.prepend_before_filter :check_request_exception
+    base.prepend_before_action :check_request_exception
   end
 
   # Resets the current +request_exception+ (to nil).
@@ -104,7 +104,30 @@ ActionController::Base.send :include, RequestExceptionHandler
 
 # NOTE: Rails "parameters-parser" monkey patching follows :
 
-if defined? ActionDispatch::ParamsParser::ParseError # Rails 4.x
+if defined? ActionDispatch::Http::Parameters # Rails 5.x
+  module ActionDispatch::Http::Parameters
+
+    alias_method 'parse_formatted_parameters_without_exception_handler', 'parse_formatted_parameters'
+
+    def parse_formatted_parameters_with_exception_handler(env)
+      begin
+        out = parse_formatted_parameters_without_exception_handler(env)
+        RequestExceptionHandler.reset_request_exception # make sure it's nil
+        out
+      rescue ParseError => e
+        e = e.cause
+        handler = RequestExceptionHandler.parse_request_parameters_exception_handler
+        handler ? handler.call(ActionDispatch::Request.new(env), e) : raise
+      rescue => e # all Exception-s get wrapped into ParseError ... but just in case
+        handler = RequestExceptionHandler.parse_request_parameters_exception_handler
+        handler ? handler.call(ActionDispatch::Request.new(env), e) : raise
+      end
+    end
+
+    alias_method 'parse_formatted_parameters', 'parse_formatted_parameters_with_exception_handler'
+
+  end
+elsif defined? ActionDispatch::ParamsParser::ParseError # Rails 4.x
 
   class ActionDispatch::ParamsParser
 
@@ -116,7 +139,7 @@ if defined? ActionDispatch::ParamsParser::ParseError # Rails 4.x
         RequestExceptionHandler.reset_request_exception # make sure it's nil
         out
       rescue ParseError => e
-        e = e.original_exception
+        e = e.cause
         handler = RequestExceptionHandler.parse_request_parameters_exception_handler
         handler ? handler.call(ActionDispatch::Request.new(env), e) : raise
       rescue => e # all Exception-s get wrapped into ParseError ... but just in case
@@ -129,61 +152,6 @@ if defined? ActionDispatch::ParamsParser::ParseError # Rails 4.x
 
   end
 
-elsif defined? ActionDispatch::ParamsParser # Rails 3.x
-
-  class ActionDispatch::ParamsParser
-
-    def parse_formatted_parameters_with_exception_handler(env)
-      begin
-        out = parse_formatted_parameters_without_exception_handler(env)
-        RequestExceptionHandler.reset_request_exception # make sure it's nil
-        out
-      rescue Exception => e # YAML, XML or Ruby code block errors
-        handler = RequestExceptionHandler.parse_request_parameters_exception_handler
-        handler ? handler.call(ActionDispatch::Request.new(env), e) : raise
-      end
-    end
-
-    alias_method_chain 'parse_formatted_parameters', 'exception_handler'
-
-  end
-
-elsif defined? ActionController::ParamsParser # Rails 2.3.x
-
-  class ActionController::ParamsParser
-
-    def parse_formatted_parameters_with_exception_handler(env)
-      begin
-        out = parse_formatted_parameters_without_exception_handler(env)
-        RequestExceptionHandler.reset_request_exception # make sure it's nil
-        out
-      rescue Exception => e # YAML, XML or Ruby code block errors
-        handler = RequestExceptionHandler.parse_request_parameters_exception_handler
-        handler ? handler.call(ActionController::Request.new(env), e) : raise
-      end
-    end
-
-    alias_method_chain 'parse_formatted_parameters', 'exception_handler'
-
-  end
-
-else # old-style Rails < 2.3
-
-  ActionController::AbstractRequest.class_eval do
-
-    def parse_formatted_request_parameters_with_exception_handler
-      begin
-        out = parse_formatted_request_parameters_without_exception_handler
-        RequestExceptionHandler.reset_request_exception # make sure it's nil
-        out
-      rescue Exception => e # YAML, XML or Ruby code block errors
-        handler = RequestExceptionHandler.parse_request_parameters_exception_handler
-        handler ? handler.call(self, e) : raise
-      end
-    end
-
-    alias_method_chain :parse_formatted_request_parameters, :exception_handler
-
-  end
-
+else
+  raise "Ok dafuk"
 end
