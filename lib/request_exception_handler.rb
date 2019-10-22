@@ -111,6 +111,7 @@ if defined? ActionDispatch::Http::Parameters # Rails 5.x
 
     def parse_formatted_parameters_with_exception_handler(env)
       begin
+        puts "--------------------- block given?: #{block_given?.inspect} ---------------------------------"
         out = parse_formatted_parameters_without_exception_handler(env)
         RequestExceptionHandler.reset_request_exception # make sure it's nil
         out
