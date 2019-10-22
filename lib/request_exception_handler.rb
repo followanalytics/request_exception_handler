@@ -109,10 +109,9 @@ if defined? ActionDispatch::Http::Parameters # Rails 5.x
 
     alias_method 'parse_formatted_parameters_without_exception_handler', 'parse_formatted_parameters'
 
-    def parse_formatted_parameters_with_exception_handler(env)
+    def parse_formatted_parameters_with_exception_handler(env, &block)
       begin
-        puts "--------------------- block given?: #{block_given?.inspect} ---------------------------------"
-        out = parse_formatted_parameters_without_exception_handler(env)
+        out = parse_formatted_parameters_without_exception_handler(env, &block)
         RequestExceptionHandler.reset_request_exception # make sure it's nil
         out
       rescue ParseError => e
